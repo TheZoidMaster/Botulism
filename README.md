@@ -1,2 +1,2 @@
-# botulism
+# Botulism
 Discord AI Chatbot Framework
