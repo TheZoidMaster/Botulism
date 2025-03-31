@@ -51,8 +51,8 @@ async def reload_config(ctx):
 
 @bot.event
 async def on_message(message: discord.Message):
-    if bot.user in message.mentions:
-        if message.author == bot.user or message.author.bot:
+    if bot.user in message.mentions or config["name"].lower() in message.content.lower():
+        if message.author == bot.user:
             return
         async with message.channel.typing():
             conversation = await get_conversation(message.channel.id)
@@ -67,24 +67,29 @@ async def on_message(message: discord.Message):
 
 
 async def get_response(conversation, message: discord.Message):
-    if config["system"] != "":
-        conversation.insert(0,
-                            {"role": "system", "content": config["system"]})
     if config["append_system"]:
         reply_context = message.reference if message.reference else None
         if reply_context:
             reply_message = await message.channel.fetch_message(reply_context.message_id)
-        conversation.insert(0,
-                            {"role": "system", "content": f"you are a discord bot. your current display name is {bot.user.display_name}. you can use markdown to format your messages. only reply to the latest message in the conversation unless strictly necessary. try to keep responses short.\nyou are currently replying to {message.author.display_name} (@{message.author.name}) saying \"{message.content}\"" + (f' in reply to {reply_message.author.display_name} saying "{reply_message.content}".' if reply_context else '.') + f"\nyou are currently in \"#{message.channel.name}\", which is in the \"{message.channel.category.name}\" category, within the server \"{message.guild.name}\"."})
+        conversation.insert(len(conversation) - 1,
+                            {"role": "system", "content": f"you are a discord bot. your current display name is {bot.user.display_name}, and your username is @{bot.user.name}. you can use markdown to format your messages. only reply to the latest message in the conversation unless strictly necessary. try to keep responses short.\nyou are currently replying to {message.author.display_name} (@{message.author.name}) saying \"{message.content}\"" + (f' in response to {reply_message.author.display_name} saying "{reply_message.content}".' if reply_context else '.') + f"\nyou are currently in \"#{message.channel.name}\", which is in the \"{message.channel.category.name}\" category, within the server \"{message.guild.name}\". NEVER copy the user's message, always give a unique response."})
+    if config["system"] != "":
+        conversation.insert(len(conversation) - 1,
+                            {"role": "system", "content": config["system"]})
 
-    response = await ollama.AsyncClient().chat(
-        model=config["model"],
-        messages=conversation,
-        stream=False,
-        options={
-            "temperature": config["temperature"]
-        }
-    )
+    for _ in range(10):
+        response = await ollama.AsyncClient().chat(
+            model=config["model"],
+            messages=conversation,
+            stream=False,
+            options={
+                "temperature": config["temperature"]
+            }
+        )
+        if await check_parroting(conversation, response.message.content):
+            break
+    else:
+        response.message.content = "I'm sorry, I couldn't generate a suitable response after multiple attempts."
 
     return response.message.content
 
@@ -121,7 +126,7 @@ async def get_conversation(channel_id):
                 except:
                     reply_message = None
             current_chunk.append((f'{message.author.display_name} (@{message.author.name}) said "{message.content}"' +
-                                 (f' in reply to {reply_message.author.display_name} (@{reply_message.author.name}) saying "{reply_message.content}"' if reply_context and reply_message else '')).replace(f"<@{bot.user.id}>", f"@{bot.user.name}"))
+                                 (f' replying to {reply_message.author.display_name} (@{reply_message.author.name}) saying "{reply_message.content}"' if reply_context and reply_message else '')).replace(f"<@{bot.user.id}>", f"@{bot.user.name}"))
     if len(current_chunk) > 0:
         current_chunk.reverse()
         current_message["content"] = "\n".join(current_chunk)
@@ -130,5 +135,59 @@ async def get_conversation(channel_id):
     conversation.reverse()
 
     return conversation
+
+
+async def check_parroting(proposed_conversation, proposed_response):
+    conversation_string = "\n".join(
+        [f'{message["role"]}: {message["content"]}' for message in proposed_conversation]
+    )
+    conversation = [
+        {"role": "system", "content": f"The user is going to give you a conversation and a proposed response. Use your \"allow_message\" tool to allow or deny the message. Deny the message if it is a copy of another message in the conversation, otherwise allow it. Do not be too strict. Never respond in text, always use the \"allow_message\" tool."},
+        {"role": "user", "content": f"Conversation: {conversation_string}\n\nProposed Response: {proposed_response}"},
+    ]
+
+    print("checking response: ", proposed_response)
+
+    response = await ollama.AsyncClient().chat(
+        model=config["model"],
+        messages=conversation,
+        stream=False,
+        tools=[{
+            "type": "function",
+            "function": {
+                "name": "allow_response",
+                "description": "allow or disallow the response",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "response": {
+                            "type": "boolean",
+                            "description": "whether to allow the response or not",
+                        }
+                    },
+                    "required": ["response"]
+                }
+            }
+        }]
+    )
+
+    print("parroting check response: ", response.message.content)
+
+    if response.message.tool_calls:
+        for tool in response.message.tool_calls:
+            if tool.function.name == "allow_response":
+                try:
+                    print("tool call found, returning ",
+                          tool.function.arguments["response"])
+                    return bool(tool.function.arguments["response"])
+                except:
+                    print(
+                        "tool call found, but error parsing response, returning False")
+                    return False
+
+    print("no tool call found, returning False")
+
+    return False
+
 
 bot.run(config["token"])
