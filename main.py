@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 import discord
 from discord.ext import commands
 import ollama
@@ -14,6 +15,7 @@ bot = commands.Bot(command_prefix=config["prefix"], intents=intents)
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}!")
+    await bot.change_presence(activity=discord.CustomActivity(name=config["status"]))
 
 
 @bot.command()
@@ -46,6 +48,7 @@ async def get_history(ctx: discord.Message, channel_id: int = None):
 async def reload_config(ctx):
     global config
     config = json.load(open("config.json"))
+    await bot.change_presence(activity=discord.CustomActivity(name=config["status"]))
     await ctx.reply("config reloaded")
 
 
@@ -67,17 +70,19 @@ async def on_message(message: discord.Message):
 
 
 async def get_response(conversation, message: discord.Message):
-    if config["append_system"]:
-        reply_context = message.reference if message.reference else None
-        if reply_context:
-            reply_message = await message.channel.fetch_message(reply_context.message_id)
-        conversation.insert(len(conversation) - 1,
-                            {"role": "system", "content": f"you are a discord bot. your current display name is {bot.user.display_name}, and your username is @{bot.user.name}. you can use markdown to format your messages. only reply to the latest message in the conversation unless strictly necessary. try to keep responses short.\nyou are currently replying to {message.author.display_name} (@{message.author.name}) saying \"{message.content}\"" + (f' in response to {reply_message.author.display_name} saying "{reply_message.content}".' if reply_context else '.') + f"\nyou are currently in \"#{message.channel.name}\", which is in the \"{message.channel.category.name}\" category, within the server \"{message.guild.name}\". NEVER copy the user's message, always give a unique response."})
-    if config["system"] != "":
-        conversation.insert(len(conversation) - 1,
-                            {"role": "system", "content": config["system"]})
+    try:
+        if config["append_default_system"]:
+            reply_context = message.reference if message.reference else None
+            if reply_context:
+                reply_message = await message.channel.fetch_message(reply_context.message_id)
+            emois = await get_emojis()
+            conversation.insert(len(conversation) - 1,
+                                {"role": "system", "content": f"you are a discord bot. your current display name is {bot.user.display_name}, and your username is @{bot.user.name}. you can use markdown to format your messages. only reply to the latest message in the conversation unless strictly necessary. try to keep responses short.\nyou are currently replying to \"{message.author.display_name}\" (@{message.author.name}) saying \"{message.content}\"" + (
+                                    f' in the context of "{reply_message.author.display_name}" (@{reply_message.author.name}) saying "{reply_message.content}".' if reply_context else '.') + f"\nyou are currently in \"#{message.channel.name}\", which is in the \"{message.channel.category.name}\" category, within the server \"{message.guild.name}\". the current channel description is {message.channel.topic}. to ping somebody, just do it like this: @username. NEVER copy the user's message, always give a unique response, or you will be BRUTALLY MURDERED.\ncurrently available emojis (to use these, just type :emoji_name_here: NOT <:emoji_name_here:id>): {', '.join(emois)}"})
+        if config["system"] != "":
+            conversation.insert(len(conversation) - 1,
+                                {"role": "system", "content": config["system"]})
 
-    for _ in range(10):
         response = await ollama.AsyncClient().chat(
             model=config["model"],
             messages=conversation,
@@ -86,12 +91,74 @@ async def get_response(conversation, message: discord.Message):
                 "temperature": config["temperature"]
             }
         )
-        if await check_parroting(conversation, response.message.content):
-            break
-    else:
-        response.message.content = "I'm sorry, I couldn't generate a suitable response after multiple attempts."
+    except Exception as e:
+        return f"yell at <@854819626969333771> for being stupid and while you're at it, give them this error\n`{e}`"
 
-    return response.message.content
+    response_text = response.message.content
+    matches = re.findall(r":(.*?):", response_text)
+    for match in matches:
+        emoji_code = await get_emoji_code(match)
+        if emoji_code:
+            response_text = response_text.replace(f":{match}:", emoji_code)
+
+    matches = re.findall(r"@([a-zA-Z0-9_]+)", response_text)
+    for match in matches:
+        ping_code = await get_ping_code(match, message.guild.id)
+        if ping_code:
+            response_text = response_text.replace(f"@{match}", ping_code)
+
+    response_text = re.sub(r'[^\x00-\x7F]+', '', response_text)
+
+    return response_text
+
+
+@bot.command()
+@commands.is_owner()
+async def dump_system(ctx):
+    try:
+        message = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+    except Exception as e:
+        await ctx.reply(f"failed to fetch message, did you run the command in reply to a message?\n`{e}`")
+        return
+    reply_context = message.reference if message.reference else None
+    if reply_context:
+        reply_message = await message.channel.fetch_message(reply_context.message_id)
+    emois = await get_emojis()
+    system_message = f"you are a discord bot. your current display name is {bot.user.display_name}, and your username is @{bot.user.name}. you can use markdown to format your messages. only reply to the latest message in the conversation unless strictly necessary. try to keep responses short.\nyou are currently replying to \"{message.author.display_name}\" (@{message.author.name}) saying \"{message.content}\"" + (
+        f' in the context of "{reply_message.author.display_name}" (@{reply_message.author.name}) saying "{reply_message.content}".' if reply_context else '.') + f"\nyou are currently in \"#{message.channel.name}\", which is in the \"{message.channel.category.name}\" category, within the server \"{message.guild.name}\". the current channel description is {message.channel.topic}. to ping somebody, just do it like this: @username. NEVER copy the user's message, always give a unique response, or you will be BRUTALLY MURDERED.\ncurrently available emojis (to use these, just type :emoji_name_here: NOT <:emoji_name_here:id>): {', '.join(emois)}"
+    await ctx.reply(f"```{system_message}```")
+
+
+async def get_emojis():
+    emojis = []
+    emoji_strings = []
+    for guild in bot.guilds:
+        for emoji in guild.emojis:
+            emojis.append(emoji)
+    for emoji in emojis:
+        emoji_strings.append(f"{emoji.name}")
+    return emoji_strings
+
+
+async def get_emoji_code(emoji_name):
+    for guild in bot.guilds:
+        for emoji in guild.emojis:
+            if emoji.name == emoji_name:
+                if emoji.animated:
+                    emoji_code = f"<a:{emoji.name}:{emoji.id}>"
+                else:
+                    emoji_code = f"<:{emoji.name}:{emoji.id}>"
+                return emoji_code
+    return None
+
+
+async def get_ping_code(username, guild_id):
+    guild = bot.get_guild(guild_id)
+    if guild:
+        for member in guild.members:
+            if member.name.lower() == username.lower():
+                return f"<@{member.id}>"
+    return username
 
 
 async def get_conversation(channel_id):
@@ -125,8 +192,28 @@ async def get_conversation(channel_id):
                     reply_message = await channel.fetch_message(reply_context.message_id)
                 except:
                     reply_message = None
-            current_chunk.append((f'{message.author.display_name} (@{message.author.name}) said "{message.content}"' +
-                                 (f' replying to {reply_message.author.display_name} (@{reply_message.author.name}) saying "{reply_message.content}"' if reply_context and reply_message else '')).replace(f"<@{bot.user.id}>", f"@{bot.user.name}"))
+            message_content = message.content
+            ping_match = re.search(r"<@!?(\d+)>", message_content)
+            if ping_match:
+                user_id = int(ping_match.group(1))
+                try:
+                    user = await bot.fetch_user(user_id)
+                    message_content = message_content.replace(
+                        ping_match.group(0), f"\"{user.display_name}\" (@{user.name})")
+                except:
+                    pass
+
+            emoji_match = re.search(r"<a?:(\w+):(\d+)>", message_content)
+            if emoji_match:
+                emoji_name = emoji_match.group(1)
+                try:
+                    message_content = message_content.replace(
+                        emoji_match.group(0), f":{emoji_name}:")
+                except:
+                    pass
+
+            current_chunk.append((f'"{message.author.display_name}" (@{message.author.name}) said "{message_content}"' +
+                                 (f' in the context of "{reply_message.author.display_name}" (@{reply_message.author.name}) saying "{reply_message.content}"' if reply_context and reply_message else '')))
     if len(current_chunk) > 0:
         current_chunk.reverse()
         current_message["content"] = "\n".join(current_chunk)
@@ -135,59 +222,5 @@ async def get_conversation(channel_id):
     conversation.reverse()
 
     return conversation
-
-
-async def check_parroting(proposed_conversation, proposed_response):
-    conversation_string = "\n".join(
-        [f'{message["role"]}: {message["content"]}' for message in proposed_conversation]
-    )
-    conversation = [
-        {"role": "system", "content": f"The user is going to give you a conversation and a proposed response. Use your \"allow_message\" tool to allow or deny the message. Deny the message if it is a copy of another message in the conversation, otherwise allow it. Do not be too strict. Never respond in text, always use the \"allow_message\" tool."},
-        {"role": "user", "content": f"Conversation: {conversation_string}\n\nProposed Response: {proposed_response}"},
-    ]
-
-    print("checking response: ", proposed_response)
-
-    response = await ollama.AsyncClient().chat(
-        model=config["model"],
-        messages=conversation,
-        stream=False,
-        tools=[{
-            "type": "function",
-            "function": {
-                "name": "allow_response",
-                "description": "allow or disallow the response",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "response": {
-                            "type": "boolean",
-                            "description": "whether to allow the response or not",
-                        }
-                    },
-                    "required": ["response"]
-                }
-            }
-        }]
-    )
-
-    print("parroting check response: ", response.message.content)
-
-    if response.message.tool_calls:
-        for tool in response.message.tool_calls:
-            if tool.function.name == "allow_response":
-                try:
-                    print("tool call found, returning ",
-                          tool.function.arguments["response"])
-                    return bool(tool.function.arguments["response"])
-                except:
-                    print(
-                        "tool call found, but error parsing response, returning False")
-                    return False
-
-    print("no tool call found, returning False")
-
-    return False
-
 
 bot.run(config["token"])
