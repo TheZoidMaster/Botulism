@@ -1,6 +1,6 @@
 # Botulism
 
-a Discord AI chatbot framework
+a Discord AI chatbot template
 
 Config is stored in `config.json`. Set the bot token, prefix, and other settings in this file.
 
