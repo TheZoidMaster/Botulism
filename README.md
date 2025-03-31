@@ -1,17 +1,39 @@
-# Botulism
+<div style="display: flex; align-items: center;">
+    <img src="assets/botulism.svg" alt="Botulism Logo" style="margin-right: 10px; width: auto; height: 64px;"/>
+    <h1 style="margin: 0; font-size: 3em;">Botulism</h1>
+</div>
+
+---
 
 Discord AI Chatbot Framework
 
-Config is stored in config.json. You can set the bot token, prefix, and other settings there.
+Config is stored in `config.json`. Set the bot token, prefix, and other settings in this file.
 
-## Config file contents:
+## Config File Contents
 
--   **token**: A string representing the authentication token. This is a sensitive value and should be kept secure.
--   **name**: The name of the bot, represented as a string. This is used for triggering a resposne without pinging the bot
--   **status**: A string to be used as the bot's status.
--   **model**: Specifies the AI model being used, represented as a string. Example: "llama3.1". You must have the model pre-pulled in ollama before this will work.
--   **temperature**: A numeric value that controls the randomness of the bot's responses. Higher values (e.g., 1.5) result in more creative outputs.
--   **prefix**: A string defining the command prefix for the bot. For example, "b!".
--   **system**: A detailed string containing the bot's system instructions, personality, and behavioral guidelines. This includes how the bot should interact with users and specific stylistic rules.
--   **append_default_system**: A boolean indicating whether the default system instructions should be appended to the bot's configuration. `true` means they will be appended.
--   **history_limit**: An integer specifying the maximum number of messages to retain in the bot's conversation history. Example: 40.
+-   **token**:  
+     A string representing the authentication token. Keep this secure!
+
+-   **name**:  
+     The bot's name as a string. It is used for invoking responses without pinging.
+
+-   **status**:  
+     A string that defines the bot’s current status.
+
+-   **model**:  
+     A string specifying the AI model in use (e.g., "llama3.1"). Ensure the model is pre-pulled in ollama.
+
+-   **temperature**:  
+     A numeric value controlling response randomness. Higher values (e.g., 1.5) produce more creative outputs.
+
+-   **prefix**:  
+     A string that defines the command prefix (e.g., "b!").
+
+-   **system**:  
+     A detailed string that outlines system instructions, personality, and behavioral guidelines.
+
+-   **append_default_system**:  
+     A boolean indicating if default system instructions should be appended (`true` means they will be).
+
+-   **history_limit**:  
+     An integer specifying the maximum number of messages to retain in the conversation history (e.g., 40).

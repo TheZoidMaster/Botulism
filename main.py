@@ -60,8 +60,6 @@ async def on_message(message: discord.Message):
         async with message.channel.typing():
             conversation = await get_conversation(message.channel.id)
             response = await get_response(conversation, message)
-            response = response.replace(
-                "@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
             try:
                 await message.reply(response[:2000], mention_author=True)
             except discord.HTTPException as e:
