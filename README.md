@@ -1,11 +1,6 @@
-<div style="display: flex; align-items: center;">
-    <img src="assets/botulism.svg" alt="Botulism Logo" style="margin-right: 10px; width: auto; height: 64px;"/>
-    <h1 style="margin: 0; font-size: 3em;">Botulism</h1>
-</div>
+# Botulism
 
----
-
-Discord AI Chatbot Framework
+a Discord AI chatbot framework
 
 Config is stored in `config.json`. Set the bot token, prefix, and other settings in this file.
 
