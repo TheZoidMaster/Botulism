@@ -32,3 +32,6 @@ Config is stored in `config.json`. Set the bot token, prefix, and other settings
 
 -   **history_limit**:  
      An integer specifying the maximum number of messages to retain in the conversation history (e.g., 40).
+
+-   **always_respond_channel_id**:  
+     A string representing the channel ID where the bot will always respond, regardless of if it gets pinged or not.

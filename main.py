@@ -54,7 +54,15 @@ async def reload_config(ctx):
 
 @bot.event
 async def on_message(message: discord.Message):
-    if bot.user in message.mentions or config["name"].lower() in message.content.lower():
+    override = False
+    try:
+        always_respond_channel_id = int(config["always_respond_channel_id"])
+    except KeyError:
+        always_respond_channel_id = None
+    if always_respond_channel_id:
+        if message.channel.id == always_respond_channel_id:
+            override = True
+    if bot.user in message.mentions or config["name"].lower() in message.content.lower() or override:
         if message.author == bot.user:
             return
         async with message.channel.typing():
@@ -190,28 +198,29 @@ async def get_conversation(channel_id):
                     reply_message = await channel.fetch_message(reply_context.message_id)
                 except:
                     reply_message = None
-            message_content = message.content
-            ping_match = re.search(r"<@!?(\d+)>", message_content)
-            if ping_match:
-                user_id = int(ping_match.group(1))
-                try:
-                    user = await bot.fetch_user(user_id)
-                    message_content = message_content.replace(
-                        ping_match.group(0), f"\"{user.display_name}\" (@{user.name})")
-                except:
-                    pass
+            if not message.content.startswith(config["prefix"]) and not message.content.startswith("-#"):
+                message_content = message.content
+                ping_match = re.search(r"<@!?(\d+)>", message_content)
+                if ping_match:
+                    user_id = int(ping_match.group(1))
+                    try:
+                        user = await bot.fetch_user(user_id)
+                        message_content = message_content.replace(
+                            ping_match.group(0), f"\"{user.display_name}\" (@{user.name})")
+                    except:
+                        pass
 
-            emoji_match = re.search(r"<a?:(\w+):(\d+)>", message_content)
-            if emoji_match:
-                emoji_name = emoji_match.group(1)
-                try:
-                    message_content = message_content.replace(
-                        emoji_match.group(0), f":{emoji_name}:")
-                except:
-                    pass
+                emoji_match = re.search(r"<a?:(\w+):(\d+)>", message_content)
+                if emoji_match:
+                    emoji_name = emoji_match.group(1)
+                    try:
+                        message_content = message_content.replace(
+                            emoji_match.group(0), f":{emoji_name}:")
+                    except:
+                        pass
 
-            current_chunk.append((f'"{message.author.display_name}" (@{message.author.name}) said "{message_content}"' +
-                                 (f' in the context of "{reply_message.author.display_name}" (@{reply_message.author.name}) saying "{reply_message.content}"' if reply_context and reply_message else '')))
+                current_chunk.append((f'"{message.author.display_name}" (@{message.author.name}) said "{message_content}"' +
+                                     (f' in the context of "{reply_message.author.display_name}" (@{reply_message.author.name}) saying "{reply_message.content}"' if reply_context and reply_message else '')))
     if len(current_chunk) > 0:
         current_chunk.reverse()
         current_message["content"] = "\n".join(current_chunk)
