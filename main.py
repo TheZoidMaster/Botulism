@@ -62,7 +62,7 @@ async def on_message(message: discord.Message):
     if always_respond_channel_id:
         if message.channel.id == always_respond_channel_id:
             override = True
-    if (bot.user in message.mentions or config["name"].lower() in message.content.lower() or override) and not message.starstwith(config["prefix"]) and not message.content.startswith("-#") and not message.author.bot:
+    if (bot.user in message.mentions or config["name"].lower() in message.content.lower() or override) and not message.content.startswith(config["prefix"]) and not message.content.startswith("-#") and not message.author.bot:
         async with message.channel.typing():
             conversation = await get_conversation(message.channel.id)
             response = await get_response(conversation, message)
