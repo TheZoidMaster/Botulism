@@ -227,6 +227,8 @@ async def get_conversation(channel_id):
                 current_message = {"role": "assistant", "content": ""}
             current_chunk.append(message.content)
         else:
+            if message.content == "---":
+                break
             if current_message["role"] == "assistant" or current_message["role"] == "?":
                 current_chunk.reverse()
                 current_message["content"] = "\n".join(current_chunk)
