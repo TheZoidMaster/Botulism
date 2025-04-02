@@ -4,6 +4,7 @@ import re
 import discord
 from discord.ext import commands
 import ollama
+import asyncio
 
 config = json.load(open("config.json"))
 
@@ -61,7 +62,7 @@ async def on_message(message: discord.Message):
     if always_respond_channel_id:
         if message.channel.id == always_respond_channel_id:
             override = True
-    if (bot.user in message.mentions or config["name"].lower() in message.content.lower() or override or "@everyone" in message.content.lower()) and not message.content.startswith(config["prefix"]) and not message.content.startswith("-#") and not message.author == bot.user:
+    if (bot.user in message.mentions or config["name"].lower() in message.content.lower() or override or "@everyone" in message.content.lower()) and not message.content.startswith(config["prefix"]) and not message.content.startswith("-#") and not message.author == bot.user and not message.author.bot:
         async with message.channel.typing():
             conversation = await get_conversation(message.channel.id)
             response = await get_response(conversation, message)
@@ -109,47 +110,53 @@ async def get_response(conversation, message: discord.Message):
             conversation.insert(len(conversation) - 1,
                                 {"role": "system", "content": config["system"]})
 
-        response = await ollama.AsyncClient().chat(
-            model=config["model"],
-            messages=conversation,
-            stream=False,
-            options={
-                "temperature": config["temperature"]
-            }
-        )
+        if 'response_lock' not in globals():
+            response_lock = asyncio.Lock()
+
+        async with response_lock:
+            print(
+                f"replying to @{message.author.name} in #{message.channel.name} in {message.guild.name} saying \"{message.content}\"")
+
+            final_message = ""
+            async for chunk in await ollama.AsyncClient().chat(
+                model=config["model"],
+                messages=conversation,
+                stream=True,
+                options={
+                    "temperature": config["temperature"]
+                }
+            ):
+                content = chunk.message.content
+                print(content, end="", flush=True)
+                final_message += content
+
+            response = final_message
+            print("\n")
     except Exception as e:
         return f"yell at <@854819626969333771> for being stupid and while you're at it, give them this error\n`{e}`"
 
-    response_text = response.message.content
-    matches = re.findall(r":(.*?):", response_text)
+    response
+    matches = re.findall(r":(.*?):", response)
     for match in matches:
         emoji_code = await get_emoji_code(match)
         if emoji_code:
-            response_text = response_text.replace(f":{match}:", emoji_code)
+            response = response.replace(f":{match}:", emoji_code)
 
-    available_emojis = await get_emojis()
-    for emoji_name in available_emojis:
-        pattern = r'(?<!:)\b' + re.escape(emoji_name) + r'\b(?!:)'
-        if re.search(pattern, response_text):
-            emoji_code = await get_emoji_code(emoji_name)
-            if emoji_code:
-                response_text = re.sub(pattern, emoji_code, response_text)
-
-    angle_matches = re.findall(r"<@([a-zA-Z0-9_]+)>", response_text)
+    angle_matches = re.findall(r"<@([a-zA-Z0-9_]+)>", response)
     for match in angle_matches:
         ping_code = await get_ping_code(match, message.guild.id)
         if ping_code:
-            response_text = response_text.replace(f"<@{match}>", ping_code)
+            response = response.replace(f"<@{match}>", ping_code)
 
-    matches = re.findall(r"@([a-zA-Z0-9_]+)", response_text)
+    matches = re.findall(r"@([a-zA-Z0-9_]+)", response)
     for match in matches:
         ping_code = await get_ping_code(match, message.guild.id)
         if ping_code:
-            response_text = response_text.replace(f"@{match}", ping_code)
+            response = response.replace(f"@{match}", ping_code)
 
-    response_text = re.sub(r'[^\x00-\x7F]+', '', response_text)
+    response = re.sub(r'[^\x00-\x7F]+', '', response)
 
-    return response_text
+    return response
 
 
 @bot.command()
