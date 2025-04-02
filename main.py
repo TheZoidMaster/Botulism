@@ -61,7 +61,7 @@ async def on_message(message: discord.Message):
     if always_respond_channel_id:
         if message.channel.id == always_respond_channel_id:
             override = True
-    if (bot.user in message.mentions or config["name"].lower() in message.content.lower() or override) and not message.content.startswith(config["prefix"]) and not message.content.startswith("-#") and not message.author.bot:
+    if (bot.user in message.mentions or config["name"].lower() in message.content.lower() or override or "@everyone" in message.content.lower()) and not message.content.startswith(config["prefix"]) and not message.content.startswith("-#") and not message.author == bot.user:
         async with message.channel.typing():
             conversation = await get_conversation(message.channel.id)
             response = await get_response(conversation, message)
@@ -70,6 +70,29 @@ async def on_message(message: discord.Message):
             except discord.HTTPException as e:
                 pass
     await bot.process_commands(message)
+
+
+async def clean_message(message: str):
+    ping_match = re.search(r"<@!?(\d+)>", message)
+    if ping_match:
+        user_id = int(ping_match.group(1))
+        try:
+            user = await bot.fetch_user(user_id)
+            message = message.replace(
+                ping_match.group(0), f"\"{user.display_name}\" (@{user.name})")
+        except:
+            pass
+
+    emoji_match = re.search(r"<a?:(\w+):(\d+)>", message)
+    if emoji_match:
+        emoji_name = emoji_match.group(1)
+        try:
+            message = message.replace(
+                emoji_match.group(0), f":{emoji_name}:")
+        except:
+            pass
+
+    return message
 
 
 async def get_response(conversation, message: discord.Message):
@@ -81,7 +104,7 @@ async def get_response(conversation, message: discord.Message):
             emois = await get_emojis()
             conversation.insert(len(conversation) - 1,
                                 {"role": "system", "content": f"you are a discord bot. your current display name is {bot.user.display_name}, and your username is @{bot.user.name}. you can use markdown to format your messages. only reply to the latest message in the conversation unless strictly necessary. try to keep responses short.\nyou are currently replying to \"{message.author.display_name}\" (@{message.author.name}) saying \"{message.content}\"" + (
-                                    f' in the context of "{reply_message.author.display_name}" (@{reply_message.author.name}) saying "{reply_message.content}".' if reply_context else '.') + f"\nyou are currently in \"#{message.channel.name}\", within the server \"{message.guild.name}\". to ping somebody, just do it like this: @username (just the person's username with an @ in front), not like this: <@userid>. NEVER copy the user's message, always give a unique response, or you will be BRUTALLY MURDERED.\ncurrently available emojis (to use these, just type :emoji_name_here: (the emoji name wrapped in colons) NOT <:emoji_name_here:id>): {', '.join(emois)}"})
+                                    f' in the context of "{reply_message.author.display_name}" (@{reply_message.author.name}) saying "{await clean_message(reply_message.content)}".' if reply_context else '.') + f"\nyou are currently in \"#{message.channel.name}\", within the server \"{message.guild.name}\". to ping somebody, just do it like this: @username (just the person's username with an @ in front), not like this: <@userid>. NEVER copy the user's message, always give a unique response, or you will be BRUTALLY MURDERED.\ncurrently available emojis (to use these, just type :emoji_name_here: (the emoji name wrapped in colons) NOT <:emoji_name_here:id>): {', '.join(emois)}"})
         if config["system"] != "":
             conversation.insert(len(conversation) - 1,
                                 {"role": "system", "content": config["system"]})
@@ -103,6 +126,20 @@ async def get_response(conversation, message: discord.Message):
         emoji_code = await get_emoji_code(match)
         if emoji_code:
             response_text = response_text.replace(f":{match}:", emoji_code)
+
+    available_emojis = await get_emojis()
+    for emoji_name in available_emojis:
+        pattern = r'(?<!:)\b' + re.escape(emoji_name) + r'\b(?!:)'
+        if re.search(pattern, response_text):
+            emoji_code = await get_emoji_code(emoji_name)
+            if emoji_code:
+                response_text = re.sub(pattern, emoji_code, response_text)
+
+    angle_matches = re.findall(r"<@([a-zA-Z0-9_]+)>", response_text)
+    for match in angle_matches:
+        ping_code = await get_ping_code(match, message.guild.id)
+        if ping_code:
+            response_text = response_text.replace(f"<@{match}>", ping_code)
 
     matches = re.findall(r"@([a-zA-Z0-9_]+)", response_text)
     for match in matches:
@@ -128,7 +165,7 @@ async def dump_system(ctx):
         reply_message = await message.channel.fetch_message(reply_context.message_id)
     emois = await get_emojis()
     system_message = f"you are a discord bot. your current display name is {bot.user.display_name}, and your username is @{bot.user.name}. you can use markdown to format your messages. only reply to the latest message in the conversation unless strictly necessary. try to keep responses short.\nyou are currently replying to \"{message.author.display_name}\" (@{message.author.name}) saying \"{message.content}\"" + (
-        f' in the context of "{reply_message.author.display_name}" (@{reply_message.author.name}) saying "{reply_message.content}".' if reply_context else '.') + f"\nyou are currently in \"#{message.channel.name}\", within the server \"{message.guild.name}\". to ping somebody, just do it like this: @username (just the person's username with an @ in front), not like this: <@userid>. NEVER copy the user's message, always give a unique response, or you will be BRUTALLY MURDERED.\ncurrently available emojis (to use these, just type :emoji_name_here: (the emoji name wrapped in colons) NOT <:emoji_name_here:id>): {', '.join(emois)}"
+        f' in the context of "{reply_message.author.display_name}" (@{reply_message.author.name}) saying "{await clean_message(reply_message.content)}".' if reply_context else '.') + f"\nyou are currently in \"#{message.channel.name}\", within the server \"{message.guild.name}\". to ping somebody, just do it like this: @username (just the person's username with an @ in front), not like this: <@userid>. NEVER copy the user's message, always give a unique response, or you will be BRUTALLY MURDERED.\ncurrently available emojis (to use these, just type :emoji_name_here: (the emoji name wrapped in colons) NOT <:emoji_name_here:id>): {', '.join(emois)}"
     await ctx.reply(f"```{system_message}```")
 
 
@@ -196,28 +233,10 @@ async def get_conversation(channel_id):
                 except:
                     reply_message = None
             if not message.content.startswith(config["prefix"]) and not message.content.startswith("-#"):
-                message_content = message.content
-                ping_match = re.search(r"<@!?(\d+)>", message_content)
-                if ping_match:
-                    user_id = int(ping_match.group(1))
-                    try:
-                        user = await bot.fetch_user(user_id)
-                        message_content = message_content.replace(
-                            ping_match.group(0), f"\"{user.display_name}\" (@{user.name})")
-                    except:
-                        pass
-
-                emoji_match = re.search(r"<a?:(\w+):(\d+)>", message_content)
-                if emoji_match:
-                    emoji_name = emoji_match.group(1)
-                    try:
-                        message_content = message_content.replace(
-                            emoji_match.group(0), f":{emoji_name}:")
-                    except:
-                        pass
+                message_content = await clean_message(message.content)
 
                 current_chunk.append((f'"{message.author.display_name}" (@{message.author.name}) said "{message_content}"' +
-                                     (f' in the context of "{reply_message.author.display_name}" (@{reply_message.author.name}) saying "{reply_message.content}"' if reply_context and reply_message else '')))
+                                     (f' in the context of "{reply_message.author.display_name}" (@{reply_message.author.name}) saying "{await clean_message(reply_message.content)}"' if reply_context and reply_message else '')))
     if len(current_chunk) > 0:
         current_chunk.reverse()
         current_message["content"] = "\n".join(current_chunk)
