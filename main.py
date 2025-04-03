@@ -154,6 +154,8 @@ async def get_response(conversation, message: discord.Message):
         if ping_code:
             response = response.replace(f"@{match}", ping_code)
 
+    response = re.sub(r'<(?!@)(\d+)>', r'<@\1>', response)
+
     response = re.sub(r'[^\x00-\x7F]+', '', response)
 
     return response
