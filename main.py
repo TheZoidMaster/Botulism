@@ -115,7 +115,7 @@ async def get_response(conversation, message: discord.Message):
 
         async with response_lock:
             print(
-                f"replying to @{message.author.name} in #{message.channel.name} in {message.guild.name} saying \"{message.content}\"")
+                f"replying to @{message.author.name} in #{message.channel.name} in {message.guild.name} saying \"{await clean_message(message.content)}\"")
 
             final_message = ""
             async for chunk in await ollama.AsyncClient().chat(
