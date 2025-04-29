@@ -1,3 +1,6 @@
+> [!IMPORTANT]  
+> This has been depricated in favor of [Hivemind](https://github.com/TheZoidMaster/Hivemind).
+
 # Botulism
 
 a Discord AI chatbot template
