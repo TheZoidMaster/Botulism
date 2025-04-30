@@ -74,8 +74,7 @@ async def on_message(message: discord.Message):
 
 
 async def clean_message(message: str):
-    ping_match = re.search(r"<@!?(\d+)>", message)
-    if ping_match:
+    for ping_match in list(re.finditer(r"<@!?(\d+)>", message)):
         user_id = int(ping_match.group(1))
         try:
             user = await bot.fetch_user(user_id)
@@ -84,8 +83,7 @@ async def clean_message(message: str):
         except:
             pass
 
-    emoji_match = re.search(r"<a?:(\w+):(\d+)>", message)
-    if emoji_match:
+    for emoji_match in list(re.finditer(r"<a?:(\w+):(\d+)>", message)):
         emoji_name = emoji_match.group(1)
         try:
             message = message.replace(
