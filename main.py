@@ -136,10 +136,8 @@ async def get_response(conversation, message: discord.Message):
     response
     matches = re.finditer(r":(.*?):", response)
     for match in matches:
-        print(f"found emoji {match.group(1)}")
         emoji_code = await get_emoji_code(match.group(1))
         if emoji_code:
-            print(f"found emoji code for {match.group(1)} ({emoji_code})")
             response = response.replace(f":{match.group(1)}:", emoji_code)
 
     angle_matches = re.finditer(r"<@([a-zA-Z0-9_]+)>", response)
