@@ -220,7 +220,6 @@ async def get_conversation(channel_id):
     for message in messages:
         if message.author == bot.user:
             if current_message["role"] == "user" or current_message["role"] == "?":
-                print(current_chunk)
                 current_chunk.reverse()
                 current_message["content"] = "\n".join(current_chunk)
                 current_chunk = []
