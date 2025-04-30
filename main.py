@@ -134,23 +134,25 @@ async def get_response(conversation, message: discord.Message):
         return f"yell at <@854819626969333771> for being stupid and while you're at it, give them this error\n`{e}`"
 
     response
-    matches = re.findall(r":(.*?):", response)
+    matches = re.finditer(r":(.*?):", response)
     for match in matches:
-        emoji_code = await get_emoji_code(match)
+        print(f"found emoji {match.group(1)}")
+        emoji_code = await get_emoji_code(match.group(1))
         if emoji_code:
-            response = response.replace(f":{match}:", emoji_code)
+            print(f"found emoji code for {match.group(1)} ({emoji_code})")
+            response = response.replace(f":{match.group(1)}:", emoji_code)
 
-    angle_matches = re.findall(r"<@([a-zA-Z0-9_]+)>", response)
+    angle_matches = re.finditer(r"<@([a-zA-Z0-9_]+)>", response)
     for match in angle_matches:
-        ping_code = await get_ping_code(match, message.guild.id)
+        ping_code = await get_ping_code(match.group(1), message.guild.id)
         if ping_code:
-            response = response.replace(f"<@{match}>", ping_code)
+            response = response.replace(f"<@{match.group(1)}>", ping_code)
 
-    matches = re.findall(r"@([a-zA-Z0-9_]+)", response)
+    matches = re.finditer(r"@([a-zA-Z0-9_]+)", response)
     for match in matches:
-        ping_code = await get_ping_code(match, message.guild.id)
+        ping_code = await get_ping_code(match.group(1), message.guild.id)
         if ping_code:
-            response = response.replace(f"@{match}", ping_code)
+            response = response.replace(f"@{match.group(1)}", ping_code)
 
     response = re.sub(r'<(?!@)(\d+)>', r'<@\1>', response)
 
