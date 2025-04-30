@@ -227,7 +227,7 @@ async def get_conversation(channel_id):
                 current_chunk = []
                 conversation.append(current_message)
                 current_message = {"role": "assistant", "content": ""}
-            current_chunk.append(message.content)
+            current_chunk.append(clean_message(message.content))
         else:
             if message.content == "---":
                 break
