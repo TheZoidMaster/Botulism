@@ -133,8 +133,7 @@ async def get_response(conversation, message: discord.Message):
     except Exception as e:
         return f"yell at <@854819626969333771> for being stupid and while you're at it, give them this error\n`{e}`"
 
-    response
-    matches = re.finditer(r":(.*?):", response)
+    matches = re.finditer(r":([^\s]+?):", response)
     for match in matches:
         emoji_code = await get_emoji_code(match.group(1))
         if emoji_code:
